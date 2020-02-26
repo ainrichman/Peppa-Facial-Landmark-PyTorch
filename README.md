@@ -5,6 +5,13 @@ Here is a Demo with 23M file size :D. 女神迪丽热巴。
 
 ![](images/dlrb.gif)
 
+Other Chinese famous actors:
+
+![](images/ab.jpg)
+![](images/hg.jpg)
+![](images/hxm.jpg)
+![](images/ym.jpg)
+
 这个库是610265158的face_landmark库的PyTorch实现，用户名是他的QQ号，赶紧去面基。
 
 ## Introduction

@@ -24,7 +24,7 @@ class Detector:
         add = int(max(bbox_width, bbox_height))
         bimg = cv2.copyMakeBorder(image, add, add, add, add, borderType=cv2.BORDER_CONSTANT, value=[127., 127., 127.])
         bbox += add
-        face_width = (1 + 2 * 0.25) * bbox_width
+        face_width = (1 + 2 * 0.2) * bbox_width
         center = [(bbox[0] + bbox[2]) // 2, (bbox[1] + bbox[3]) // 2]
         bbox[0] = center[0] - face_width // 2
         bbox[1] = center[1] - face_width // 2

@@ -106,8 +106,10 @@ class Detector:
 
     def detect(self, orig):
         orig_h, orig_w, _ = orig.shape
-        img = resize_and_center(orig, self.empty, target_size=self.detection_size)
-        scale = np.array([img.shape[1], img.shape[0], img.shape[1], img.shape[0]])
+        # img = resize_and_center(orig, self.empty, target_size=self.detection_size)
+        img = cv2.resize(orig,self.detection_size)
+        # scale = np.array([img.shape[1], img.shape[0], img.shape[1], img.shape[0]])
+        scale = np.array([orig.shape[1],orig.shape[0],orig.shape[1],orig.shape[0]])
         img = np.transpose(img, (2, 0, 1)) / 255
         img = np.array([img]).astype(np.float32)
         raw = self.sess.run(None, {self.input_name: img})[0]
@@ -119,7 +121,7 @@ class Detector:
         bboxes = dets[:, 0:4]
         bboxes = bboxes * scale
         confs = dets[:, 4]
-        bboxes = recover_pos(bboxes, (orig_w, orig_h), self.detection_size)
+        # bboxes = recover_pos(bboxes, (orig_w, orig_h), self.detection_size)
         bboxes = bboxes.astype(np.int)
         return bboxes, confs
 
