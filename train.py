@@ -151,7 +151,7 @@ if __name__ == '__main__':
     model.cuda()
     if checkpoint is not None:
         model.load_state_dict(torch.load(checkpoint))
-        start_epoch = int(checkpoint.split(" ")[-2]) + 1
+        start_epoch = int(checkpoint.split("_")[-2]) + 1
     else:
         start_epoch = 0
 
