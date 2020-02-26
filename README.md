@@ -55,6 +55,7 @@ In my experience, the training is extremely slow, especially with the exploding 
 
 这个`recon_dataset.py`的原理就是把图片裁一下，这样训练的时候读数据的时候能快一些。
 
+I trained with about 4 hours per epoch on my RTX2060. Sad...
 
 ## Demo
 Run `demo.py`. Change the code as you need. 

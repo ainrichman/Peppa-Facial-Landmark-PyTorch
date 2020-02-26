@@ -7,8 +7,8 @@ import sys
 import time
 from utils.consoler import rewrite, next_line
 
-lr_decay_every_epoch = [1, 2, 50, 100]
-lr_value_every_epoch = [0.00001, 0.0001,  0.00001, 0.000001]
+lr_decay_every_epoch = [1, 25, 35, 75, 150]
+lr_value_every_epoch = [0.00001, 0.0001, 0.00005, 0.00001, 0.000001]
 weight_decay_factor = 5.e-4
 l2_regularization = weight_decay_factor
 if "win32" in sys.platform:
@@ -52,10 +52,6 @@ def decay(epoch):
         return lr_value_every_epoch[3]
     if epoch >= lr_decay_every_epoch[3] and epoch < lr_decay_every_epoch[4]:
         return lr_value_every_epoch[4]
-    if epoch >= lr_decay_every_epoch[4] and epoch < lr_decay_every_epoch[5]:
-        return lr_value_every_epoch[5]
-    if epoch >= lr_decay_every_epoch[5]:
-        return lr_value_every_epoch[6]
 
 
 def calculate_loss(predict_keypoints, label_keypoints):
@@ -144,7 +140,6 @@ def eval(epoch):
 
 if __name__ == '__main__':
     checkpoint = None
-
     torch.backends.cudnn.benchmark = True
     train_dataset = Landmark("train.json", input_size, True)
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=4)
@@ -154,15 +149,19 @@ if __name__ == '__main__':
     model = Slim()
     model.train()
     model.cuda()
-    model.load_state_dict(torch.load(checkpoint))
+    if checkpoint is not None:
+        model.load_state_dict(torch.load(checkpoint))
+        start_epoch = int(checkpoint.split(" ")[-2]) + 1
+    else:
+        start_epoch = 0
 
     wing_loss_fn = WingLoss()
     mse_loss_fn = torch.nn.MSELoss()
     bce_loss_fn = torch.nn.BCEWithLogitsLoss()
 
     optim = torch.optim.Adam(model.parameters(), lr=lr_value_every_epoch[0], weight_decay=5e-4)
-    for epoch in range(0, 100):
-        train(epoch)
+    for epoch in range(start_epoch, 150):
         for param_group in optim.param_groups:
             param_group['lr'] = decay(epoch)
+        train(epoch)
         eval(epoch)
