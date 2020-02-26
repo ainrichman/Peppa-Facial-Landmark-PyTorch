@@ -6,13 +6,12 @@ from face_onnx.prior_box import PriorBox
 import os
 
 cfg = {
-    'name': 'FaceBoxes',
-    'min_dim': 256,
-    'feature_maps': [[8, 8], [4, 4], [2, 2]],
+    'name': 'Slim',
+    'min_dim': 128,
+    'feature_maps': [[20, 20], [10, 10], [5, 5], [3, 3]],
     'aspect_ratios': [[1], [1]],
-    'steps': [32, 64, 128],
     'variance': [0.1, 0.2],
-    'clip': False
+    'clip': False,
 }
 
 
@@ -41,43 +40,6 @@ def nms(dets, thresh):
     return dets[keep]
 
 
-def recover_pos(pos, orig_size, cur_size):
-    max_dim = max(orig_size)
-    pos[:, 0::2] = pos[:, 0::2] / cur_size[0] * max_dim
-    pos[:, 1::2] = pos[:, 1::2] / cur_size[1] * max_dim
-    if orig_size[1] > orig_size[0]:
-        padding_len = int((orig_size[1] - orig_size[0]) / 2)
-        pos[:, 0::2] = pos[:, 0::2] - padding_len
-    else:
-        padding_len = int((orig_size[0] - orig_size[1]) / 2)
-        pos[:, 1::2] = pos[:, 1::2] - padding_len
-    return pos.astype(np.int)
-
-
-def resize_and_center(img, empty, bboxes=None, target_size=(256, 256)):
-    if img.shape[1] > img.shape[0]:
-        img = cv2.resize(img, (target_size[0], int(img.shape[0] / img.shape[1] * target_size[1])))
-        canvas = empty
-        padding_len = int((img.shape[1] - img.shape[0]) / 2)
-        canvas[padding_len:padding_len + img.shape[0]] = img
-        if bboxes is not None:
-            bboxes[:, 1::2] = bboxes[:, 1::2] + padding_len
-    else:
-        img = cv2.resize(img, (target_size[1], int(img.shape[0] / target_size[0] * target_size[1])))
-        canvas = empty
-        padding_len = int((img.shape[0] - img.shape[1]) / 2)
-        canvas[:, padding_len:padding_len + img.shape[1]] = img
-        if bboxes is not None:
-            bboxes[:, 0::2] = bboxes[:, 0::2] + padding_len
-    if bboxes is not None:
-        bboxes[:, 0::2] = bboxes[:, 0::2] / max(img.shape[1], img.shape[0]) * target_size[0]
-        bboxes[:, 1::2] = bboxes[:, 1::2] / max(img.shape[0], img.shape[1]) * target_size[1]
-    if bboxes is None:
-        return canvas
-    else:
-        return canvas, bboxes
-
-
 def decode_raw(raw_detections):
     raw_detections = raw_detections[raw_detections[..., 4] > 0.5]
     if len(raw_detections) == 0:
@@ -87,17 +49,17 @@ def decode_raw(raw_detections):
 
 def decode(raw, priors, variances):
     boxes = np.concatenate((
-        priors[:, :2] + raw[:, :2] * variances[0] * priors[:, 2:],
-        priors[:, 2:] * np.exp(raw[:, 2:4] * variances[1]), raw[:, 4:]), 1)
-    boxes[:, :2] -= boxes[:, 2:4] / 2
-    boxes[:, 2:4] += boxes[:, :2]
+        priors[:, 0:2] + raw[:, 0:2] * variances[0] * priors[:, 2:4],
+        priors[:, 2:4] * np.exp(raw[:, 2:4] * variances[1]), raw[:, 4:]), 1)
+    boxes[:, 0:2] -= boxes[:, 2:4] / 2
+    boxes[:, 2:4] += boxes[:, 0:2]
     return boxes
 
 
 class Detector:
-    def __init__(self, detection_size=(256, 256)):
+    def __init__(self, detection_size=(160, 160)):
         dirname = os.path.dirname(__file__)
-        self.sess = rt.InferenceSession(os.path.join(dirname, "faceboxes.onnx"))
+        self.sess = rt.InferenceSession(os.path.join(dirname, "slim_160.onnx"))
         self.input_name = self.sess.get_inputs()[0].name
         self.variance = [0.1, 0.2]
         self.empty = np.zeros((*detection_size, 3))
@@ -106,10 +68,8 @@ class Detector:
 
     def detect(self, orig):
         orig_h, orig_w, _ = orig.shape
-        # img = resize_and_center(orig, self.empty, target_size=self.detection_size)
-        img = cv2.resize(orig,self.detection_size)
-        # scale = np.array([img.shape[1], img.shape[0], img.shape[1], img.shape[0]])
-        scale = np.array([orig.shape[1],orig.shape[0],orig.shape[1],orig.shape[0]])
+        img = cv2.resize(orig, self.detection_size)
+        scale = np.array([orig.shape[1], orig.shape[0], orig.shape[1], orig.shape[0]])
         img = np.transpose(img, (2, 0, 1)) / 255
         img = np.array([img]).astype(np.float32)
         raw = self.sess.run(None, {self.input_name: img})[0]
@@ -121,7 +81,6 @@ class Detector:
         bboxes = dets[:, 0:4]
         bboxes = bboxes * scale
         confs = dets[:, 4]
-        # bboxes = recover_pos(bboxes, (orig_w, orig_h), self.detection_size)
         bboxes = bboxes.astype(np.int)
         return bboxes, confs
 
@@ -129,11 +88,18 @@ class Detector:
 if __name__ == '__main__':
     cap = cv2.VideoCapture(0)
     detector = Detector()
+    total = 0
+    count = 0
     while cap.isOpened():
         ret, frame = cap.read()
         if frame is None:
             break
+        start = time.time()
         faces, confs = detector.detect(frame)
+        end = time.time()
+        total += (end - start)
+        count += 1
+        print(total / count)
         for i, face in enumerate(faces):
             frame = cv2.rectangle(frame, tuple(face[0:2]), tuple(face[2:4]), (255, 0, 0), 2, 1)
             frame = cv2.putText(frame, str(confs[i]), tuple(face[0:2]), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 1,
