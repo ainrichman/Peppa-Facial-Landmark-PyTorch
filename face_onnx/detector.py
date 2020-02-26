@@ -1,108 +1,98 @@
-import onnxruntime as rt
-import cv2
 import time
+import cv2
 import numpy as np
-from face_onnx.prior_box import PriorBox
+import onnxruntime as ort
 import os
 
-cfg = {
-    'name': 'Slim',
-    'min_dim': 128,
-    'feature_maps': [[20, 20], [10, 10], [5, 5], [3, 3]],
-    'aspect_ratios': [[1], [1]],
-    'variance': [0.1, 0.2],
-    'clip': False,
-}
+
+def area_of(left_top, right_bottom):
+    hw = np.clip(right_bottom - left_top, 0.0, None)
+    return hw[..., 0] * hw[..., 1]
 
 
-def nms(dets, thresh):
-    x1 = dets[:, 0]
-    y1 = dets[:, 1]
-    x2 = dets[:, 2]
-    y2 = dets[:, 3]
-    scores = dets[:, 4]
-    areas = (x2 - x1 + 1) * (y2 - y1 + 1)
-    order = scores.argsort()[::-1]
-    keep = []
-    while order.size > 0:
-        i = order[0]
-        keep.append(i)
-        xx1 = np.maximum(x1[i], x1[order[1:]])
-        yy1 = np.maximum(y1[i], y1[order[1:]])
-        xx2 = np.minimum(x2[i], x2[order[1:]])
-        yy2 = np.minimum(y2[i], y2[order[1:]])
-        w = np.maximum(0.0, xx2 - xx1 + 1)
-        h = np.maximum(0.0, yy2 - yy1 + 1)
-        inter = w * h
-        ovr = inter / (areas[i] + areas[order[1:]] - inter)
-        inds = np.where(ovr <= thresh)[0]
-        order = order[inds + 1]
-    return dets[keep]
+def iou_of(boxes0, boxes1, eps=1e-5):
+    overlap_left_top = np.maximum(boxes0[..., :2], boxes1[..., :2])
+    overlap_right_bottom = np.minimum(boxes0[..., 2:], boxes1[..., 2:])
+
+    overlap_area = area_of(overlap_left_top, overlap_right_bottom)
+    area0 = area_of(boxes0[..., :2], boxes0[..., 2:])
+    area1 = area_of(boxes1[..., :2], boxes1[..., 2:])
+    return overlap_area / (area0 + area1 - overlap_area + eps)
 
 
-def decode_raw(raw_detections):
-    raw_detections = raw_detections[raw_detections[..., 4] > 0.5]
-    if len(raw_detections) == 0:
-        return np.array([])
-    return np.array(nms(raw_detections, 0.3))
+def hard_nms(box_scores, iou_threshold, top_k=-1, candidate_size=200):
+    scores = box_scores[:, -1]
+    boxes = box_scores[:, :-1]
+    picked = []
+    # _, indexes = scores.sort(descending=True)
+    indexes = np.argsort(scores)
+    # indexes = indexes[:candidate_size]
+    indexes = indexes[-candidate_size:]
+    while len(indexes) > 0:
+        # current = indexes[0]
+        current = indexes[-1]
+        picked.append(current)
+        if 0 < top_k == len(picked) or len(indexes) == 1:
+            break
+        current_box = boxes[current, :]
+        # indexes = indexes[1:]
+        indexes = indexes[:-1]
+        rest_boxes = boxes[indexes, :]
+        iou = iou_of(
+            rest_boxes,
+            np.expand_dims(current_box, axis=0),
+        )
+        indexes = indexes[iou <= iou_threshold]
+
+    return box_scores[picked, :]
 
 
-def decode(raw, priors, variances):
-    boxes = np.concatenate((
-        priors[:, 0:2] + raw[:, 0:2] * variances[0] * priors[:, 2:4],
-        priors[:, 2:4] * np.exp(raw[:, 2:4] * variances[1]), raw[:, 4:]), 1)
-    boxes[:, 0:2] -= boxes[:, 2:4] / 2
-    boxes[:, 2:4] += boxes[:, 0:2]
-    return boxes
+def predict(width, height, confidences, boxes, prob_threshold, iou_threshold=0.3, top_k=-1):
+    boxes = boxes[0]
+    confidences = confidences[0]
+    picked_box_probs = []
+    picked_labels = []
+    for class_index in range(1, confidences.shape[1]):
+        probs = confidences[:, class_index]
+        mask = probs > prob_threshold
+        probs = probs[mask]
+        if probs.shape[0] == 0:
+            continue
+        subset_boxes = boxes[mask, :]
+        box_probs = np.concatenate([subset_boxes, probs.reshape(-1, 1)], axis=1)
+        box_probs = hard_nms(box_probs,
+                             iou_threshold=iou_threshold,
+                             top_k=top_k,
+                             )
+        picked_box_probs.append(box_probs)
+        picked_labels.extend([class_index] * box_probs.shape[0])
+    if not picked_box_probs:
+        return np.array([]), np.array([]), np.array([])
+    picked_box_probs = np.concatenate(picked_box_probs)
+    picked_box_probs[:, 0] *= width
+    picked_box_probs[:, 1] *= height
+    picked_box_probs[:, 2] *= width
+    picked_box_probs[:, 3] *= height
+    return picked_box_probs[:, :4].astype(np.int32), np.array(picked_labels), picked_box_probs[:, 4]
 
 
 class Detector:
-    def __init__(self, detection_size=(160, 160)):
-        dirname = os.path.dirname(__file__)
-        self.sess = rt.InferenceSession(os.path.join(dirname, "slim_160.onnx"))
+    def __init__(self):
+        onnx_path = os.path.join(os.path.dirname(__file__), "version-RFB-320.onnx")
+        self.sess = ort.InferenceSession(onnx_path)
         self.input_name = self.sess.get_inputs()[0].name
-        self.variance = [0.1, 0.2]
-        self.empty = np.zeros((*detection_size, 3))
-        self.detection_size = detection_size
-        self.priors = PriorBox(cfg, image_size=detection_size).forward()
 
-    def detect(self, orig):
-        orig_h, orig_w, _ = orig.shape
-        img = cv2.resize(orig, self.detection_size)
-        scale = np.array([orig.shape[1], orig.shape[0], orig.shape[1], orig.shape[0]])
-        img = np.transpose(img, (2, 0, 1)) / 255
-        img = np.array([img]).astype(np.float32)
-        raw = self.sess.run(None, {self.input_name: img})[0]
-        raw = raw.reshape((-1, 5))
-        raw = decode(raw, self.priors, self.variance)
-        dets = decode_raw(raw)
-        if len(dets) == 0:
-            return np.array([]), np.array([])
-        bboxes = dets[:, 0:4]
-        bboxes = bboxes * scale
-        confs = dets[:, 4]
-        bboxes = bboxes.astype(np.int)
-        return bboxes, confs
-
-
-if __name__ == '__main__':
-    cap = cv2.VideoCapture(0)
-    detector = Detector()
-    total = 0
-    count = 0
-    while cap.isOpened():
-        ret, frame = cap.read()
-        if frame is None:
-            break
-        start = time.time()
-        faces, confs = detector.detect(frame)
-        end = time.time()
-        total += (end - start)
-        count += 1
-        print(total / count)
-        for i, face in enumerate(faces):
-            frame = cv2.rectangle(frame, tuple(face[0:2]), tuple(face[2:4]), (255, 0, 0), 2, 1)
-            frame = cv2.putText(frame, str(confs[i]), tuple(face[0:2]), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 1,
-                                1)
-        cv2.imshow("", frame)
-        cv2.waitKey(27)
+    def detect(self, orig_image):
+        image = cv2.cvtColor(orig_image, cv2.COLOR_BGR2RGB)
+        image = cv2.resize(image, (320, 240))
+        image_mean = np.array([127, 127, 127])
+        image = (image - image_mean) / 128
+        image = np.transpose(image, [2, 0, 1])
+        image = np.expand_dims(image, axis=0)
+        image = image.astype(np.float32)
+        # confidences, boxes = predictor.run(image)
+        time_time = time.time()
+        confidences, boxes = self.sess.run(None, {self.input_name: image})
+        print("cost time:{}".format(time.time() - time_time))
+        boxes, labels, probs = predict(orig_image.shape[1], orig_image.shape[0], confidences, boxes, 0.8)
+        return boxes, probs

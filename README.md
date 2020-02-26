@@ -21,7 +21,7 @@ The training and inference strategies are just copy of 610265158. WingLoss, Mult
  3. I added LK optical flow smoothing at inference stage. 
  4. ONNX, MNN are included. 
 
-训练和推理处理基本是抄上面那个人的。该用的策略都用了。不同点主要是用更轻量的Slim网络和用300W-LP训练模型。Slim网络的结构特别适合通过MNN在移动端上使用。光流跟踪主要是提升视觉稳定性。另外，工程提供了一个简易的人脸检测器来Demo效果，在CelebA上训练的，嫌效果不好的话就换成自己的。
+训练和推理处理基本是抄上面那个人的。该用的策略都用了。不同点主要是用更轻量的Slim网络和用300W-LP训练模型。Slim网络的结构特别适合通过MNN在移动端上使用。光流跟踪主要是提升视觉稳定性。另外，工程提供了一个简易的人脸检测器来Demo效果，直接把 https://github.com/Linzaer/Ultra-Light-Fast-Generic-Face-Detector-1MB 这个库里的模型包装了一下就拿来用了。你们可以换成自己的。
 
 #### Environment
  1. The code is tested on Windows 10. Linux should also be OK. Inference code should work on Mac OS, but Training... 兄弟别想不开。
