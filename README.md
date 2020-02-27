@@ -27,6 +27,7 @@ The training and inference strategies are just copy of 610265158. WingLoss, Mult
  1. The code is tested on Windows 10. Linux should also be OK. Inference code should work on Mac OS, but Training... 兄弟别想不开。
  2. PyTorch 1.2.0.
  3. OpenCV 4.1.2.30. 
+ 4. Python3
 
 其它版本应该都问题不大，如果有问题，自行翻墙解决。
 
