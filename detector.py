@@ -43,7 +43,7 @@ class Detector:
             start = time.time()
             raw = self.model(crop_image)[0].cpu().numpy()
             end = time.time()
-            print("Inference Time: {:.6f}".format(end - start))
+            print("PyTorch Inference Time: {:.6f}".format(end - start))
             landmark = raw[0:136].reshape((-1, 2))
         landmark[:, 0] = landmark[:, 0] * detail[1] + detail[3]
         landmark[:, 1] = landmark[:, 1] * detail[0] + detail[2]

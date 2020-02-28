@@ -1,16 +1,16 @@
-import torch
-import cv2
 import numpy as np
-from tracker import Tracker
-from utils.headpose import get_head_pose
+import MNN
+import cv2
 import time
-import onnxruntime as rt
+from utils.headpose import get_head_pose
+from tracker import Tracker
 
 
 class Detector:
     def __init__(self, detection_size=(160, 160)):
-        self.sess = rt.InferenceSession("pretrained_weights/slim_160_latest.onnx")
-        self.input_name = self.sess.get_inputs()[0].name
+        self.interpreter = MNN.Interpreter("pretrained_weights/slim_160_latest.mnn")
+        self.session = self.interpreter.createSession()
+        self.input_tensor = self.interpreter.getSessionInput(self.session)
         self.detection_size = detection_size
         self.tracker = Tracker()
 
@@ -36,10 +36,14 @@ class Detector:
         crop_image, detail = self.crop_image(img, bbox)
         crop_image = (crop_image - 127.0) / 127.0
         crop_image = np.array([np.transpose(crop_image, (2, 0, 1))]).astype(np.float32)
+        tmp_input = MNN.Tensor((1, 3, *self.detection_size), MNN.Halide_Type_Float, crop_image,
+                               MNN.Tensor_DimensionType_Caffe)
+        self.input_tensor.copyFrom(tmp_input)
         start = time.time()
-        raw = self.sess.run(None, {self.input_name: crop_image})[0][0]
+        self.interpreter.runSession(self.session)
+        raw = np.array(self.interpreter.getSessionOutput(self.session).getData())
         end = time.time()
-        print("ONNX Inference Time: {:.6f}".format(end - start))
+        print("MNN Inference Time: {:.6f}".format(end - start))
         landmark = raw[0:136].reshape((-1, 2))
         landmark[:, 0] = landmark[:, 0] * detail[1] + detail[3]
         landmark[:, 1] = landmark[:, 1] * detail[0] + detail[2]

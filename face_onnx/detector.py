@@ -24,18 +24,14 @@ def hard_nms(box_scores, iou_threshold, top_k=-1, candidate_size=200):
     scores = box_scores[:, -1]
     boxes = box_scores[:, :-1]
     picked = []
-    # _, indexes = scores.sort(descending=True)
     indexes = np.argsort(scores)
-    # indexes = indexes[:candidate_size]
     indexes = indexes[-candidate_size:]
     while len(indexes) > 0:
-        # current = indexes[0]
         current = indexes[-1]
         picked.append(current)
         if 0 < top_k == len(picked) or len(indexes) == 1:
             break
         current_box = boxes[current, :]
-        # indexes = indexes[1:]
         indexes = indexes[:-1]
         rest_boxes = boxes[indexes, :]
         iou = iou_of(
@@ -43,7 +39,6 @@ def hard_nms(box_scores, iou_threshold, top_k=-1, candidate_size=200):
             np.expand_dims(current_box, axis=0),
         )
         indexes = indexes[iou <= iou_threshold]
-
     return box_scores[picked, :]
 
 
@@ -90,9 +85,8 @@ class Detector:
         image = np.transpose(image, [2, 0, 1])
         image = np.expand_dims(image, axis=0)
         image = image.astype(np.float32)
-        # confidences, boxes = predictor.run(image)
         time_time = time.time()
         confidences, boxes = self.sess.run(None, {self.input_name: image})
-        print("cost time:{}".format(time.time() - time_time))
+        print("Face Detector inference time:{}".format(time.time() - time_time))
         boxes, labels, probs = predict(orig_image.shape[1], orig_image.shape[0], confidences, boxes, 0.8)
         return boxes, probs

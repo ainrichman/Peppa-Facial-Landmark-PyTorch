@@ -1,7 +1,18 @@
 import cv2
 from face_onnx.detector import Detector as FaceDetector
+
+'''
+Three detector options: 
+1. Original PyTorch inference detector 
+2. MNN Python inference detector (experimental) 
+3. ONNX inference detector based on onnxruntime
+
+MNN detector is only tested on Windows 10 and Centos7.
+'''
+
 # from detector import Detector
-from onnx_detector import Detector
+from mnn_detector import Detector
+# from onnx_detector import Detector
 import numpy as np
 
 face_detector = FaceDetector()

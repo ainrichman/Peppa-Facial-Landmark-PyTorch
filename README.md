@@ -19,7 +19,7 @@ The training and inference strategies are just copy of 610265158. WingLoss, Mult
  1. I trained the model with the Slim network. The computation cost with 160 input is **26.5M Flops**. 
  2. I trained the model with 300W-LP dataset. 
  3. I added LK optical flow smoothing at inference stage. 
- 4. ONNX, MNN are included. 
+ 4. Original PyTorch, ONNX, MNN python inference code are included. 
 
 训练和推理处理基本是抄上面那个人的。该用的策略都用了。不同点主要是用更轻量的Slim网络和用300W-LP训练模型。Slim网络的结构特别适合通过MNN在移动端上使用。光流跟踪主要是提升视觉稳定性。另外，工程提供了一个简易的人脸检测器来Demo效果，直接把 https://github.com/Linzaer/Ultra-Light-Fast-Generic-Face-Detector-1MB 这个库里的模型包装了一下就拿来用了。你们可以换成自己的。
 
