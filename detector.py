@@ -21,8 +21,8 @@ class Detector:
         image = orig.copy()
         bbox_width = bbox[2] - bbox[0]
         bbox_height = bbox[3] - bbox[1]
-        face_width = (1 + 2 * 0.2) * bbox_width
-        face_height = (1 + 2 * 0.2) * bbox_height
+        face_width = (1 + 2 * 0.25) * bbox_width
+        face_height = (1 + 2 * 0.25) * bbox_height
         center = [(bbox[0] + bbox[2]) // 2, (bbox[1] + bbox[3]) // 2]
         bbox[0] = max(0, center[0] - face_width // 2)
         bbox[1] = max(0, center[1] - face_height // 2)
